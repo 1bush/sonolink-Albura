@@ -1,0 +1,51 @@
+{
+  "expo": {
+    "name": "SonoLink",
+    "slug": "sonolink",
+    "version": "2.2.0",
+    "orientation": "portrait",
+    "icon": "./assets/icon.png",
+    "userInterfaceStyle": "light",
+    "splash": {
+      "backgroundColor": "#1E8E82"
+    },
+    "assetBundlePatterns": ["**/*"],
+    "ios": {
+      "supportsTablet": true,
+      "bundleIdentifier": "al.albura.sonolink",
+      "infoPlist": {
+        "NSCameraUsageDescription": "Kamera nevojitet për të skanuar kodin QR të aparatit të ultrazërit.",
+        "NSLocalNetworkUsageDescription": "Aplikacioni lidhet me aparatin e ultrazërit në rrjetin lokal për të marrë imazhet.",
+        "NSPhotoLibraryAddUsageDescription": "Aplikacioni ruan imazhet e marra nga aparati në galeri (opsionale)."
+      }
+    },
+    "android": {
+      "package": "al.albura.sonolink",
+      "permissions": [
+        "CAMERA",
+        "ACCESS_FINE_LOCATION",
+        "ACCESS_WIFI_STATE",
+        "CHANGE_WIFI_STATE",
+        "INTERNET",
+        "ACCESS_NETWORK_STATE",
+        "READ_EXTERNAL_STORAGE",
+        "WRITE_EXTERNAL_STORAGE"
+      ]
+    },
+    "plugins": [
+      [
+        "expo-camera",
+        {
+          "cameraPermission": "Kamera nevojitet për të skanuar kodin QR të aparatit të ultrazërit."
+        }
+      ],
+      [
+        "expo-media-library",
+        {
+          "photosPermission": "Aplikacioni ruan imazhet e marra nga aparati në galeri (opsionale).",
+          "savePhotosPermission": "Aplikacioni ruan imazhet e marra nga aparati në galeri (opsionale)."
+        }
+      ]
+    ]
+  }
+}

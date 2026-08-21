@@ -1,0 +1,41 @@
+{
+  "name": "sonolink",
+  "version": "2.2.0",
+  "main": "node_modules/expo/AppEntry.js",
+  "private": true,
+  "scripts": {
+    "start": "expo start",
+    "android": "expo run:android",
+    "ios": "expo run:ios",
+    "web": "expo start --web",
+    "prebuild": "expo prebuild",
+    "test": "node scripts/test-protocol.mjs"
+  },
+  "dependencies": {
+    "@expo/vector-icons": "^14.0.0",
+    "@react-native-community/slider": "4.5.2",
+    "buffer": "^6.0.3",
+    "expo": "~51.0.0",
+    "expo-camera": "~15.0.0",
+    "expo-crypto": "~12.0.0",
+    "expo-file-system": "~17.0.1",
+    "expo-font": "~12.0.0",
+    "expo-haptics": "~13.0.0",
+    "expo-image-manipulator": "~11.0.0",
+    "expo-media-library": "~16.0.0",
+    "expo-network": "~6.0.0",
+    "expo-secure-store": "~13.0.0",
+    "expo-sharing": "~12.0.0",
+    "expo-sqlite": "~14.0.0",
+    "expo-status-bar": "~1.12.1",
+    "react": "18.2.0",
+    "react-native": "0.74.5",
+    "react-native-tcp-socket": "^6.2.0",
+    "react-native-wifi-reborn": "^4.11.1"
+  },
+  "devDependencies": {
+    "@babel/core": "^7.24.0",
+    "@types/react": "~18.2.79",
+    "typescript": "^5.3.0"
+  }
+}

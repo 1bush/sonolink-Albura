@@ -1,0 +1,23 @@
+node_modules/
+.expo/
+dist/
+web-build/
+*.log
+.DS_Store
+android/
+ios/
+*.orig.*
+.env
+logs/
+*.traineddata
+.idea/
+*.iml
+scripts/_dicom_debug.cjs
+android/.gradle/
+android/build/
+android/app/build/
+android/local.properties
+android/app/*.keystore
+
+# Local SonoDrop reverse-engineering reference artifacts
+sonodrop-source/
