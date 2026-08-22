@@ -75,6 +75,25 @@ pacientësh** pa e verifikuar më parë.
 5. Përshtat `FileFrameReader` në `framing.ts` sipas asaj çfarë sheh — pjesa
    tjetër e app-it (DB, ruajtja e skedarëve, UI) s'ka nevojë të ndryshojë.
 
+## Orthanc / DICOMweb mode
+
+SonoLink now includes an optional Orthanc client for a clinic gateway. Configure
+the Orthanc base URL and token in Settings, then test the connection. The client
+can list studies and series and fetch a preview or DICOM instance. The direct
+SonoDrop QR/TCP path remains available as a fallback. The QR/TCP file framing is
+still explicitly unverified and must be tested with synthetic studies before
+real patient data is used.
+
+The safe transfer order is:
+
+```text
+Orthanc/DICOMweb → SonoDrop TCP → optical QR transfer
+```
+
+The app must report a failed source and only mark a transfer complete after real
+bytes are received. Orthanc should be deployed behind HTTPS/authentication on a
+clinic network; do not expose it directly to the public Internet.
+
 ## Rruga alternative (jo e implementuar këtu)
 
 Manuali `DIcom_check_guide1.pdf` tregon një rrugë të dytë, plotësisht të

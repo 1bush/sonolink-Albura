@@ -1,7 +1,8 @@
-import React, { useState } from 'react';
-import { View, Text, StyleSheet, TextInput, Switch, ScrollView } from 'react-native';
+import React, { useEffect, useState } from 'react';
+import { View, Text, StyleSheet, TextInput, Switch, ScrollView, Button, Alert } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { theme } from '../theme';
+import { loadOrthancConfig, OrthancService, saveOrthancConfig } from '../services/OrthancService';
 
 interface Props {
   userName: string;
@@ -12,6 +13,24 @@ export default function SettingsScreen({ userName: initialUserName }: Props) {
   const [clinicName, setClinicName] = useState('Klinika Albura');
   const [doctorName, setDoctorName] = useState(initialUserName);
   const [darkMode, setDarkMode] = useState(true);
+  const [orthancUrl, setOrthancUrl] = useState('');
+  const [orthancToken, setOrthancToken] = useState('');
+  const [orthancStatus, setOrthancStatus] = useState('Nuk është konfiguruar');
+
+  useEffect(() => {
+    loadOrthancConfig().then((config) => {
+      if (config) { setOrthancUrl(config.baseUrl); setOrthancToken(config.token ?? ''); setOrthancStatus('Konfigurimi u ngarkua'); }
+    });
+  }, []);
+
+  const testOrthanc = async () => {
+    const config = { baseUrl: orthancUrl.trim(), token: orthancToken.trim() };
+    if (!config.baseUrl) { setOrthancStatus('Vendos URL e Orthanc'); return; }
+    await saveOrthancConfig(config);
+    const ok = await new OrthancService(config).testConnection();
+    setOrthancStatus(ok ? 'Orthanc u lidh me sukses' : 'Orthanc nuk u përgjigj');
+    if (!ok) Alert.alert('Gabim lidhjeje', 'Kontrollo URL, HTTPS, token-in dhe rrjetin e klinikës.');
+  };
 
   return (
     <ScrollView style={styles.root} contentContainerStyle={styles.content}>
@@ -56,6 +75,14 @@ export default function SettingsScreen({ userName: initialUserName }: Props) {
           trackColor={{ false: '#767577', true: theme.colors.primaryLight }}
           thumbColor={darkMode ? '#fff' : '#f4f3f4'}
         />
+      </View>
+
+      <View style={styles.card}>
+        <Text style={styles.inputLabel}>ORTHANC / DICOMWEB</Text>
+        <TextInput style={styles.input} value={orthancUrl} onChangeText={setOrthancUrl} placeholder="https://orthanc.klinika.al" placeholderTextColor={theme.colors.textMuted} autoCapitalize="none" />
+        <TextInput style={styles.input} value={orthancToken} onChangeText={setOrthancToken} placeholder="API token (opsional për test)" placeholderTextColor={theme.colors.textMuted} secureTextEntry autoCapitalize="none" />
+        <Button title="Ruaj dhe testo Orthanc" onPress={testOrthanc} />
+        <Text style={styles.rowSubtitle}>{orthancStatus}</Text>
       </View>
 
       <View style={styles.aboutCard}>

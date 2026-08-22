@@ -2,7 +2,7 @@ import { Buffer } from 'buffer';
 import type { ReceivedFileFrame } from './framing';
 import type { OpticalTransferResult } from './OpticalTransferService';
 
-export type TransferMode = 'sonodrop-tcp' | 'decimen-optical';
+export type TransferMode = 'orthanc-dicomweb' | 'sonodrop-tcp' | 'decimen-optical';
 
 export interface UnifiedReceivedFile {
   mode: TransferMode;
