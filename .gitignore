@@ -33,5 +33,11 @@ scripts/_dicom_debug.cjs
 
 # Local SonoDrop reverse-engineering reference artifacts
 sonodrop-source/
+
+# Smali disassembly kept as protocol evidence (see its README). This is another
+# vendor's code: kept for interoperability analysis only, never compiled into
+# the app and never redistributed. The APK it came from is already ignored
+# above, so this must be too.
+sonodrop-decompiled/smali/
 t.txt
 testout.txt
