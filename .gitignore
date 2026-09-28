@@ -33,3 +33,4 @@ scripts/_dicom_debug.cjs
 
 # Local SonoDrop reverse-engineering reference artifacts
 sonodrop-source/
+t.txt
