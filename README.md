@@ -1,4 +1,4 @@
-# SonoLink v2.1 (Android/Expo)
+# SonoLink v3.0 (Android/Expo)
 
 Aplikacion Android (Expo/React Native + TypeScript) për Klinika Albura, që lidhet
 direkt me aparatin **SonoScape P50 Elite** duke skanuar QR-in e ekranit
@@ -33,11 +33,24 @@ src/
     framing.ts                   — ⚠️ parsimi i skedarëve — SHIH "E PAKONFIRMUAR" më poshtë
     database.ts                  — SQLite lokale, skemë = us_album.db origjinale
     fileStorage.ts               — ruajtja e skedarëve në disk (expo-file-system)
+    DicomImage.ts                — dekodues DICOM → RGB → PNG (8/16-bit, RLE, multi-frame)
+    fileKinds.ts                 — identifikon formatin nga bajtët, jo nga emri i skedarit
+    gallerySaver.ts              — vendos JPG/BMP/MP4 në galeri, DICOM si PNG
+    OrthancService.ts            — klient optional Orthanc/DICOMweb
   screens/                       — HomeScreen, PairingScreen, AlbumScreen, SettingsScreen
+                               —   plus DritaExtrasScreen dhe OpticalScreen
   components/BottomTabBar.tsx
   theme/index.ts
-scripts/test-protocol.mjs        — test i shpejtë i round-trip QR (node scripts/test-protocol.mjs)
+scripts/
+  test-protocol.mjs              — round-trip QR + kontrolle mbi payload-in e P50
+  dicom-image-test.cjs           — dekoduesi DICOM dhe enkoduesi PNG
+  file-kinds-test.cjs            — identifikimi i formatit nga bajtët
+  dicom-viewer-test.cjs          — rasterizuesi DICOM → BMP
+  ingest-recovery-test.cjs       — rimëkëmbim pas gabimi/heartbeat-it
+  optical-bridge-test.cjs        — ura optike Drita → LTDecoder
 ```
+
+Të gjitha testet njëherësh: `npm test`.
 
 ## Çfarë është KONFIRMUAR (100% e sigurt)
 

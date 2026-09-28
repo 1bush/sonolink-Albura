@@ -15,7 +15,11 @@ android/app/*.keystore
 android/app/*.jks
 ios/
 *.orig.*
+# Secrets. .env holds a live third-party API key, so keep it ignored and never
+# remove this line without checking what the file actually contains.
 .env
+.env.*
+*.env
 logs/
 *.traineddata
 .idea/
