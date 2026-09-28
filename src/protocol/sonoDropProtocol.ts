@@ -14,10 +14,13 @@
  *     host/port/patientId)
  *
  *   A real "QR Export" payload was decoded out of photo pixels (jsQR) from
- *   IMG_20260915_194824 and is pinned verbatim in scripts/test-protocol.mjs:
- *     9000 0110 0006 | 9001 0011 "DCOM-ALBURA" | 9002 0010 "al0u5a2b2r"
- *     | 9003 0001 "2" | 9004 0012 "891.561.2.19" | 9005 0005 "99199"
- *     | 9006 0023 "1026_96561123260314_596"
+ *   IMG_20260915_194824 and is pinned in scripts/test-protocol.mjs. The
+ *   credential values there are REDACTED but every field length is preserved,
+ *   because the two details below are properties of the lengths and framing
+ *   rather than of the values:
+ *     9000 0110 0006 | 9001 0011 "REDACTED-SS" | 9002 0010 "REDACTED01"
+ *     | 9003 0001 "2" | 9004 0012 "000.000.0.00" | 9005 0005 "99199"
+ *     | 9006 0023 "1026_00000000000000_000"
  *
  *   Two details that capture pinned down and a self-built round-trip cannot:
  *     1. `totalLen` counts ONLY the TLV block, not the 12-byte header

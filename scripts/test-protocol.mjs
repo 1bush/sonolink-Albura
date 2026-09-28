@@ -73,7 +73,7 @@ const ok =
   parsed.patientId === sample.patientId;
 
 // ---------------------------------------------------------------------------
-// REAL on-device capture.
+// REAL on-device capture — VALUES REDACTED, STRUCTURE PRESERVED.
 //
 // Decoded from the "QR Export" dialog on an actual SonoScope P50, photographed
 // on 2026-09-15 (IMG_20260915_194824). Payload recovered straight out of the
@@ -81,19 +81,28 @@ const ok =
 // observed bytes rather than to our own encoder's assumptions.
 //
 //   9000 0110 0006            msgType 9000 | totalLen 110 | 6 TLVs
-//   9001 0011 "DCOM-ALBURA"   SSID
-//   9002 0010 "al0u5a2b2r"    password
+//   9001 0011 "REDACTED-SS"   SSID              (11 chars)
+//   9002 0010 "REDACTED01"    password          (10 chars)
 //   9003 0001 "2"             encryption = WPA
-//   9004 0012 "891.561.2.19"  host
+//   9004 0012 "000.000.0.00"  host              (12 chars)
 //   9005 0005 "99199"         port
-//   9006 0023 "1026_96561123260314_596"  patientId
+//   9006 0023 "0000_00000000000_000"            patientId (23 chars)
+//
+// WHY THE VALUES ARE REPLACED BUT THE LENGTHS ARE NOT: this capture contains the
+// clinic's real WiFi password and a real patient identifier. This repository is
+// public, so publishing it verbatim would expose both. Every property this
+// capture exists to prove is a property of the LENGTHS and the framing, not of
+// the values, so substituting same-length strings keeps the test just as
+// strict: totalLen still has to be payload.length - 12, and "0012"/"0023" still
+// have to be read as decimal. A redaction that shortened a field would weaken
+// the test, so none of these lengths was touched.
 //
 // totalLen 110 == payload.length (122) - 12, i.e. the header is NOT counted in
 // the length field. The synthetic round-trip above cannot catch that off-by-12
 // because our own encoder computes the same way it parses.
 // ---------------------------------------------------------------------------
 const REAL_QR =
-  '90000110000690010011DCOM-ALBURA90020010al0u5a2b2r90030001290040012891.561.2.199005000599199900600231026_96561123260314_596';
+  '90000110000690010011REDACTED-SS90020010REDACTED0190030001290040012000.000.0.009005000599199900600231026_00000000000000_000';
 
 const realParsed = parseQR(REAL_QR);
 console.log('Real device QR parsed:', realParsed);
@@ -102,15 +111,19 @@ const realChecks = [
   // Compare numerically: "0110" and "110" are the same number, not the same string.
   ['header totalLen counts only the TLV block',
     parseInt(REAL_QR.slice(4, 8), 10) === REAL_QR.length - 12],
-  ['ssid', realParsed.ssid === 'DCOM-ALBURA'],
-  ['password', realParsed.password === 'al0u5a2b2r'],
+  ['ssid', realParsed.ssid === 'REDACTED-SS'],
+  ['password', realParsed.password === 'REDACTED01'],
   ['encryption raw', realParsed.encryption === '2'],
-  ['host', realParsed.host === '891.561.2.19'],
+  ['host', realParsed.host === '000.000.0.00'],
   ['port', realParsed.port === 99199],
-  ['patientId', realParsed.patientId === '1026_96561123260314_596'],
+  ['patientId', realParsed.patientId === '1026_00000000000000_000'],
   // TLV lengths are plain decimal pairs, not hex: a 12-char value is "0012",
   // and 23 chars is "0023". Reading them as hex (0x12=18) silently truncates.
   ['lengths are decimal not hex', REAL_QR.includes('90040012') && REAL_QR.includes('90060023')],
+  // The redaction must not have changed the payload size: 122 characters is
+  // what makes the totalLen assertion above meaningful, and a future edit that
+  // shortened a field would otherwise quietly weaken this whole capture.
+  ['redacted payload is still 122 chars', REAL_QR.length === 122],
 ];
 
 if (!ok) {
