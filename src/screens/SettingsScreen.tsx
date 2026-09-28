@@ -9,6 +9,7 @@ import {
   studyStats,
   type StudyRow,
 } from '../services/database';
+import { loadOrthancConfig, OrthancService, saveOrthancConfig } from '../services/OrthancService';
 
 interface Props {
   userName: string;
@@ -62,6 +63,35 @@ export default function SettingsScreen({ userName: initialUserName }: Props) {
         },
       ],
     );
+  };
+
+  // ── Orthanc / DICOMweb gateway ──
+  const [orthancUrl, setOrthancUrl] = useState('');
+  const [orthancToken, setOrthancToken] = useState('');
+  const [orthancStatus, setOrthancStatus] = useState('Nuk është konfiguruar');
+
+  useEffect(() => {
+    loadOrthancConfig().then((config) => {
+      if (config) {
+        setOrthancUrl(config.baseUrl);
+        setOrthancToken(config.token ?? '');
+        setOrthancStatus('Konfigurimi u ngarkua');
+      }
+    });
+  }, []);
+
+  const testOrthanc = async () => {
+    const config = { baseUrl: orthancUrl.trim(), token: orthancToken.trim() };
+    if (!config.baseUrl) {
+      setOrthancStatus('Vendos URL e Orthanc');
+      return;
+    }
+    await saveOrthancConfig(config);
+    const ok = await new OrthancService(config).testConnection();
+    setOrthancStatus(ok ? 'Orthanc u lidh me sukses' : 'Orthanc nuk u përgjigj');
+    if (!ok) {
+      Alert.alert('Gabim lidhjeje', 'Kontrollo URL, HTTPS, token-in dhe rrjetin e klinikës.');
+    }
   };
 
   return (
@@ -155,7 +185,32 @@ export default function SettingsScreen({ userName: initialUserName }: Props) {
         ))
       )}
 
-          <View style={styles.aboutCard}>
+      <View style={styles.card}>
+        <Text style={styles.inputLabel}>ORTHANC / DICOMWEB</Text>
+        <TextInput
+          style={styles.input}
+          value={orthancUrl}
+          onChangeText={setOrthancUrl}
+          placeholder="https://orthanc.klinika.al"
+          placeholderTextColor={theme.colors.textMuted}
+          autoCapitalize="none"
+        />
+        <TextInput
+          style={styles.input}
+          value={orthancToken}
+          onChangeText={setOrthancToken}
+          placeholder="API token (opsional për test)"
+          placeholderTextColor={theme.colors.textMuted}
+          secureTextEntry
+          autoCapitalize="none"
+        />
+        <TouchableOpacity style={styles.primaryButton} onPress={testOrthanc}>
+          <Text style={styles.primaryButtonText}>Ruaj dhe testo Orthanc</Text>
+        </TouchableOpacity>
+        <Text style={styles.rowSubtitle}>{orthancStatus}</Text>
+      </View>
+
+      <View style={styles.aboutCard}>
         <View style={styles.aboutHeader}>
           <Ionicons name="information-circle-outline" size={20} color={theme.colors.primaryLight} />
           <Text style={styles.aboutTitle}>About SonoLink 3.0.0</Text>
@@ -197,6 +252,16 @@ const styles = StyleSheet.create({
     color: theme.colors.textPrimary,
     fontSize: 15,
   },
+  // The Orthanc card arrived from the gateway work as a react-native <Button>,
+  // which renders off-theme next to every other control on this screen. A
+  // TouchableOpacity keeps it consistent without re-importing Button.
+  primaryButton: {
+    backgroundColor: theme.colors.primary,
+    borderRadius: 16,
+    paddingVertical: 14,
+    alignItems: 'center',
+  },
+  primaryButtonText: { color: '#fff', fontSize: 15, fontWeight: '700' },
   cardRow: {
     flexDirection: 'row',
     alignItems: 'center',
