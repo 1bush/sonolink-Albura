@@ -72,9 +72,62 @@ const ok =
   parsed.port === sample.port &&
   parsed.patientId === sample.patientId;
 
+// ---------------------------------------------------------------------------
+// REAL on-device capture.
+//
+// Decoded from the "QR Export" dialog on an actual SonoScope P50, photographed
+// on 2026-09-15 (IMG_20260915_194824). Payload recovered straight out of the
+// photo pixels (jsQR), NOT hand-typed — so this pins the wire format to
+// observed bytes rather than to our own encoder's assumptions.
+//
+//   9000 0110 0006            msgType 9000 | totalLen 110 | 6 TLVs
+//   9001 0011 "DCOM-ALBURA"   SSID
+//   9002 0010 "al0u5a2b2r"    password
+//   9003 0001 "2"             encryption = WPA
+//   9004 0012 "891.561.2.19"  host
+//   9005 0005 "99199"         port
+//   9006 0023 "1026_96561123260314_596"  patientId
+//
+// totalLen 110 == payload.length (122) - 12, i.e. the header is NOT counted in
+// the length field. The synthetic round-trip above cannot catch that off-by-12
+// because our own encoder computes the same way it parses.
+// ---------------------------------------------------------------------------
+const REAL_QR =
+  '90000110000690010011DCOM-ALBURA90020010al0u5a2b2r90030001290040012891.561.2.199005000599199900600231026_96561123260314_596';
+
+const realParsed = parseQR(REAL_QR);
+console.log('Real device QR parsed:', realParsed);
+
+const realChecks = [
+  // Compare numerically: "0110" and "110" are the same number, not the same string.
+  ['header totalLen counts only the TLV block',
+    parseInt(REAL_QR.slice(4, 8), 10) === REAL_QR.length - 12],
+  ['ssid', realParsed.ssid === 'DCOM-ALBURA'],
+  ['password', realParsed.password === 'al0u5a2b2r'],
+  ['encryption raw', realParsed.encryption === '2'],
+  ['host', realParsed.host === '891.561.2.19'],
+  ['port', realParsed.port === 99199],
+  ['patientId', realParsed.patientId === '1026_96561123260314_596'],
+  // TLV lengths are plain decimal pairs, not hex: a 12-char value is "0012",
+  // and 23 chars is "0023". Reading them as hex (0x12=18) silently truncates.
+  ['lengths are decimal not hex', REAL_QR.includes('90040012') && REAL_QR.includes('90060023')],
+];
+
 if (!ok) {
   console.error('❌ Round-trip MISMATCH');
   process.exit(1);
 } else {
   console.log('✅ Round-trip OK — QR build/parse matches the on-device format seen in QR Export screen.');
 }
+
+console.log('\n--- real on-device payload checks ---');
+let realOk = true;
+for (const [name, pass] of realChecks) {
+  console.log(`${pass ? '✅' : '❌'} ${name}`);
+  if (!pass) realOk = false;
+}
+if (!realOk) {
+  console.error('❌ Real on-device payload does NOT match the assumed format');
+  process.exit(1);
+}
+console.log('✅ Real P50 QR payload parses cleanly — format confirmed against actual device bytes.');

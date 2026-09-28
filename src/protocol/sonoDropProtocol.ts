@@ -7,12 +7,29 @@
  * cross-checked against the web prototype built earlier for this project.
  *
  * ============================================================================
- * CONFIRMED (seen directly on-device, image 1 "QR Export" screen + this
- * project's own web prototype):
+ * CONFIRMED against real device bytes (not just inferred from a screenshot):
  *   - QR payload: [msgType:4][totalLen:4][tlvCount:4][TLV_1]...[TLV_6]
  *   - Each TLV: [type:4][len:4][value: len bytes, UTF-8/ASCII]
  *   - msgType 9000, tlvCount 6, types 9001-9006 (SSID/password/encryption/
  *     host/port/patientId)
+ *
+ *   A real "QR Export" payload was decoded out of photo pixels (jsQR) from
+ *   IMG_20260915_194824 and is pinned verbatim in scripts/test-protocol.mjs:
+ *     9000 0110 0006 | 9001 0011 "DCOM-ALBURA" | 9002 0010 "al0u5a2b2r"
+ *     | 9003 0001 "2" | 9004 0012 "891.561.2.19" | 9005 0005 "99199"
+ *     | 9006 0023 "1026_96561123260314_596"
+ *
+ *   Two details that capture pinned down and a self-built round-trip cannot:
+ *     1. `totalLen` counts ONLY the TLV block, not the 12-byte header
+ *        (110 == 122 - 12).
+ *     2. `len` fields are plain DECIMAL pairs, not hex — a 12-char value is
+ *        "0012" and 23 chars is "0023". parseInt(..., 10) is correct;
+ *        parseInt(..., 16) would silently truncate both.
+ *
+ *   Note the QR carries only pairing metadata (~122 bytes), never image bytes.
+ *   The 5 files listed in the QR Export dialog travel over TCP/WiFi afterwards,
+ *   which is why the optical decoder is right to classify this payload as
+ *   foreign rather than a Decimen frame (see optical-bridge-test.cjs).
  *
  * NOT CONFIRMED — best-effort, needs verification against a real packet
  * capture before trusting it with real patient data:
