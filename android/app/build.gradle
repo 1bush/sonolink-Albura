@@ -122,8 +122,11 @@ android {
         applicationId 'al.albura.sonolink'
         minSdkVersion rootProject.ext.minSdkVersion
         targetSdkVersion rootProject.ext.targetSdkVersion
-        versionCode 2
-        versionName "2.2.0"
+        // Kept in step with app.json and package.json ("3.0.0"). versionCode
+        // must keep increasing for Android to accept an upgrade install: it
+        // was 2 when this said 2.2.0, so 3.0.0 takes 3.
+        versionCode 3
+        versionName "3.0.0"
     }
     // SonoLink — target Java 17 bytecode + Kotlin 1.9 JVM target.
     // Kujdes: kotlinOptions.jvmTarget DUHET "17" (jo "11" default i Expo modules
