@@ -14,9 +14,11 @@
  * ishin tashmë të importuara nga PairingScreen.
  */
 import { Buffer } from 'buffer';
-import { ensureStudyDir, saveFrame } from './fileStorage';
+import { ensureStudyDir } from './fileStorage';
 import { insertSop, incrementStudyFileCount, upsertStudy } from './database';
 import { DicomService } from './DicomService';
+import { identifyFile } from './fileKinds';
+import { saveReceivedFile, type SaveReport } from './gallerySaver';
 
 /** Të dhënat e nevojshme për të ruajtur një skedar të marrë. */
 export interface IngestFile {
@@ -31,6 +33,8 @@ export interface IngestResult {
   size: number;
   /** i pari nëse skedari ishte DICOM dhe u parsua me sukses. */
   dicom: { patientName?: string; modality?: string; rows?: number; columns?: number } | null;
+  /** Çfarë ndodhi me galerinë, dhe çfarë format u provua realisht. */
+  save?: SaveReport;
 }
 
 /**
@@ -55,13 +59,18 @@ export async function ingestReceivedFile(
     Num: 0,
   });
 
-  const saved = await saveFrame(studyId, { kind: file.kind, name: file.name, bytes });
+  // saveFrame() vetëm e shkruante skedarin dhe e prekte galerinë për
+  // jpg/png/jpeg. P50 dërgon edhe BMP, MP4/AVI, PDF dhe DICOM, të gjitha të
+  // pashoqura. saveReceivedFile() i njeh nga bajtët dhe i vendos secilin atje
+  // ku përdoruesi mund t'i gjejë.
+  const saved = await saveReceivedFile(studyId, file.name, bytes);
+  const identity = identifyFile(file.name, bytes);
 
   // P50 dërgon JPG/BMP/AVI/PDF, jo DICOM — prandaj kjo pjesë lahet vetëm
   // kur skedari vërtetë ka header DICM. DicomService nuk hedh asnjëherë:
   // kthen null për çdo gjë që nuk është DICOM.
   let dicom: IngestResult['dicom'] = null;
-  if (/\.dcm$/i.test(file.name) || /^DICOM/i.test(file.kind)) {
+  if (identity.kind === 'dicom') {
     try {
       const meta = DicomService.parse(bytes);
       if (meta) {
@@ -87,7 +96,7 @@ export async function ingestReceivedFile(
   });
   await incrementStudyFileCount(studyId);
 
-  return { path: saved.path, size: saved.size, dicom };
+  return { path: saved.path, size: saved.size, dicom, save: saved };
 }
 
 /**
