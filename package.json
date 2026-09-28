@@ -9,7 +9,7 @@
     "ios": "expo run:ios",
     "web": "expo start --web",
     "prebuild": "expo prebuild",
-    "test": "node scripts/test-protocol.mjs && node scripts/ingest-recovery-test.cjs && node scripts/framing-test.cjs && node scripts/dicom-viewer-test.cjs && node scripts/dicom-image-test.cjs && node scripts/file-kinds-test.cjs && node scripts/optical-bridge-test.cjs"
+    "test": "node scripts/test-protocol.mjs && node scripts/ingest-recovery-test.cjs && node scripts/framing-test.cjs && node scripts/crypto-test.cjs && node scripts/dicom-viewer-test.cjs && node scripts/dicom-image-test.cjs && node scripts/file-kinds-test.cjs && node scripts/optical-bridge-test.cjs"
   },
   "dependencies": {
     "@expo/vector-icons": "^14.0.0",

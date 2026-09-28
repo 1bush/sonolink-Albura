@@ -30,12 +30,17 @@ import * as MediaLibrary from 'expo-media-library';
 import { Buffer } from 'buffer';
 import { decodeDicomToRgb, encodePng } from './DicomImage';
 import { correctedName, identifyFile, type FileIdentity } from './fileKinds';
+import { detectEncryptedTransfer, markEncryptedName } from './sonodropCrypto';
 import { ensureStudyDir } from './fileStorage';
 import { formatWatermarkText } from './WatermarkService';
 
 export const GALLERY_ALBUM = 'Klinika ALBURA';
 
-export type SaveOutcome = 'gallery-photo' | 'gallery-video' | 'folder-only' | 'folder-only-failed';
+export type SaveOutcome =
+  | 'gallery-photo'
+  | 'gallery-video'
+  | 'folder-only'
+  | 'folder-only-encrypted';
 
 export interface SaveReport {
   /** Where the original bytes were written inside the study folder. */
@@ -136,6 +141,27 @@ export async function saveReceivedFile(
   const identity = identifyFile(name, bytes);
   const dir = await ensureStudyDir(studyId);
 
+  // ── Encrypted SonoDrop payload: keep it, but never present it as an image ──
+  // DataTransferThread writes every received file with a .enc suffix and
+  // decrypts it in the native library first. If the bytes are still ciphertext
+  // here, the key or the algorithm is missing, and everything downstream would
+  // treat the payload as an unknown file: the DICOM decoder would refuse it and
+  // the gallery would hold something that opens as noise. Storing it under a
+  // name that says so is the honest outcome.
+  const crypto = detectEncryptedTransfer(name, bytes);
+  if (crypto.encrypted) {
+    const encName = markEncryptedName(name.replace(/[^a-zA-Z0-9._-]/g, '_') || 'file');
+    const encPath = `${dir}${encName}`;
+    await writeBinary(encPath, bytes);
+    return {
+      path: encPath,
+      size: bytes.length,
+      identity,
+      outcome: 'folder-only-encrypted',
+      reason: crypto.reason,
+    };
+  }
+
   const safeRaw = name.replace(/[^a-zA-Z0-9._-]/g, '_') || `file_${Date.now()}`;
   const safeName = correctedName(safeRaw, identity);
   const path = `${dir}${safeName}`;
@@ -221,6 +247,8 @@ export function describeOutcome(report: SaveReport): string {
         : `${kind} u ruajt në galeri.`;
     case 'gallery-video':
       return `Video ${kind} u ruajt në galeri.`;
+    case 'folder-only-encrypted':
+      return `Skedari është i enkriptuar dhe nuk mund të hapet. ${report.reason ?? ''}`.trim();
     case 'folder-only':
       return `${kind} u ruajt vetëm në dosjen e ekzaminimit. ${report.reason ?? ''}`.trim();
     default:
