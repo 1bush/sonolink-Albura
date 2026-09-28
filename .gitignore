@@ -39,5 +39,10 @@ sonodrop-source/
 # the app and never redistributed. The APK it came from is already ignored
 # above, so this must be too.
 sonodrop-decompiled/smali/
+
+# Built APKs, kept outside the Gradle tree so a clean does not delete them.
+# The debug build is ~215 MB and carries all dev tooling; drop it first if disk
+# space is tight, the release one is the deliverable.
+apk-output/
 t.txt
 testout.txt
