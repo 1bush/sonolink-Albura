@@ -1,0 +1,75 @@
+// Top-level build file where you can add configuration options common to all sub-projects/modules.
+
+buildscript {
+    ext {
+        buildToolsVersion = findProperty('android.buildToolsVersion') ?: '34.0.0'
+        // Expo 51 / RN 0.74.5 përdor compileSdk/targetSdk = 34 (mos e ngrini në 35
+        // pa përditësuar edhe të gjitha expo-modules, ndryshe dalin Manifest
+        // merger + resource linking errors në Android Studio).
+        minSdkVersion = Integer.parseInt(findProperty('android.minSdkVersion') ?: '23')
+        compileSdkVersion = Integer.parseInt(findProperty('android.compileSdkVersion') ?: '34')
+        targetSdkVersion = Integer.parseInt(findProperty('android.targetSdkVersion') ?: '34')
+        // Kotlin 1.9.24 — versioni që teston/publikon RN 0.74. Kotlin 2.x jep
+        // "unsupported value for Kotlin language version" + ABI mismatch me
+        // kotlin-stdlib të node_modules (expo + RN presin 1.9).
+        kotlinVersion = findProperty('android.kotlinVersion') ?: '1.9.24'
+
+        ndkVersion = "26.1.10909125"
+    }
+    repositories {
+        google()
+        mavenCentral()
+    }
+    dependencies {
+        // Kombinimi i testuar për Expo 51 / RN 0.74.5:
+        //   Gradle wrapper 8.8 (max 8.9 — plugin-i @react-native/gradle-plugin i
+        //   RN 0.74 përdor serviceOf() që u hoq në Gradle 8.10+, prandaj Gradle
+        //   8.10/8.11/9.x JAPIN ERROR në sync) + AGP 8.5.2 (min Gradle 8.7) +
+        //   Kotlin 1.9.24 (RN 0.74 / Expo 51 presin 1.9.x — Kotlin 2.x thyen build-in).
+        // MOS i ngrini pa migruar RN/Expo.
+        classpath('com.android.tools.build:gradle:8.5.2')
+        classpath('com.facebook.react:react-native-gradle-plugin')
+        classpath('org.jetbrains.kotlin:kotlin-gradle-plugin:1.9.24')
+    }
+}
+
+apply plugin: "com.facebook.react.rootproject"
+
+allprojects {
+    repositories {
+        maven {
+            // All of React Native (JS, Obj-C sources, Android binaries) is installed from npm
+            url(new File(['node', '--print', "require.resolve('react-native/package.json')"].execute(null, rootDir).text.trim(), '../android'))
+        }
+        maven {
+            // Android JSC is installed from npm
+            url(new File(['node', '--print', "require.resolve('jsc-android/package.json', { paths: [require.resolve('react-native/package.json')] })"].execute(null, rootDir).text.trim(), '../dist'))
+        }
+
+        google()
+        mavenCentral()
+        maven { url 'https://www.jitpack.io' }
+    }
+}
+// @generated begin expo-camera-import - expo prebuild (DO NOT MODIFY) sync-f244f4f3d8bf7229102e8f992b525b8602c74770
+def expoCameraMavenPath = new File(["node", "--print", "require.resolve('expo-camera/package.json')"].execute(null, rootDir).text.trim(), "../android/maven")
+allprojects { repositories { maven { url(expoCameraMavenPath) } } }
+// @generated end expo-camera-import
+
+// Fix: Kotlin JVM bytecode-target mismatch.
+// Expo modules force kotlinOptions.jvmTarget = "11" while kotlin-stdlib (1.9.23) is
+// compiled for JVM 17, causing: "Cannot inline bytecode built with JVM target 17 into
+// bytecode that is being built with JVM target 11" (e.g. expo-crypto).
+// Aligning all Kotlin compilation tasks (all subprojects) to JVM 17 (matching javac/JDK 17)
+// resolves the incompatibility without editing node_modules.
+gradle.projectsEvaluated { g ->
+    def matcher = { task ->
+        try { task.hasProperty('kotlinOptions') && task.kotlinOptions != null } catch (Exception _) { false }
+    }
+    def projects = g.getRootProject().getAllprojects()
+    projects.each { p ->
+        p.getTasks().findAll(matcher).each { task ->
+            try { task.kotlinOptions.jvmTarget = "17" } catch (Exception _) {}
+        }
+    }
+}

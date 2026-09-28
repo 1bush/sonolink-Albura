@@ -9,13 +9,17 @@ import HomeScreen from './src/screens/HomeScreen';
 import AlbumScreen from './src/screens/AlbumScreen';
 import SettingsScreen from './src/screens/SettingsScreen';
 import PairingScreen from './src/screens/PairingScreen';
+import OpticalScreen from './src/screens/OpticalScreen';
+// ADDITIVE SonoLink+Drita: ekran i ri optik (file i ri, nuk prek ekranet ekzistuese).
+import DritaExtrasScreen from './src/screens/DritaExtrasScreen';
 import { initDatabase } from './src/services/database';
 import { ensureRootDir } from './src/services/fileStorage';
 import type { TabKey, LastScanSummary, ConnStatus } from './src/types';
 
 export default function App() {
   const [ready, setReady] = useState(false);
-  const [activeTab, setActiveTab] = useState<TabKey>('home');
+  // DECIMEN (transferimi optik) hapet i pari — protocol aktiv parazgjedhur.
+  const [activeTab, setActiveTab] = useState<TabKey>('optical');
   const [scanModalOpen, setScanModalOpen] = useState(false);
   const [lastScan, setLastScan] = useState<LastScanSummary | null>(null);
   const [connStatus, setConnStatus] = useState<ConnStatus>('disconnected');
@@ -61,7 +65,10 @@ export default function App() {
           />
         )}
         {activeTab === 'album' && <AlbumScreen />}
-        {activeTab === 'settings' && <SettingsScreen userName={userName} appVersion="2.2" />}
+        {activeTab === 'settings' && <SettingsScreen userName={userName} appVersion="3.0.0" />}
+        {activeTab === 'optical' && <OpticalScreen onOpenP50Scan={() => setActiveTab('scan')} />}
+        {/* ADDITIVE SonoLink+Drita: tab i ri optik nativ. */}
+        {activeTab === 'drita' && <DritaExtrasScreen />}
       </View>
 
       <BottomTabBar active={activeTab} onChange={setActiveTab} />

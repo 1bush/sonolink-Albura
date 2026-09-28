@@ -1,4 +1,4 @@
-export type TabKey = 'home' | 'scan' | 'album' | 'settings';
+export type TabKey = 'home' | 'scan' | 'album' | 'settings' | 'optical' | 'drita';
 
 export interface LastScanSummary {
   patientId: string;

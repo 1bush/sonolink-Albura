@@ -60,6 +60,8 @@ export interface ReceiveOpticalParams {
   onFrame: (frame: { kind: string; name: string; data: string }) => void;
   onComplete: (result: OpticalTransferResult) => void;
   onError: (error: string) => void;
+  /** Optional progress callback: solved blocks out of total source blocks. */
+  onProgress?: (progress: number, total: number) => void;
 }
 
 /**
@@ -168,13 +170,27 @@ export function encodeOpticalFrame(opts: {
 /**
  * Feed raw scanned QR bytes into the decoder. Resets to a fresh decoder when a
  * new/foreign stream appears (different identity). Calls onFrame as blocks
- * recover and onComplete when the container is fully reassembled and its FNV
- * checksum matches.
+ * recover, onProgress as solvedCount advances, and onComplete when the
+ * container is fully reassembled and its FNV checksum matches.
+ *
+ * Error-recovery guarantees:
+ *  - CHECKSUM MISMATCH: the decoder is discarded (identity cleared) so a
+ *    retransmitted carousel can rebuild the file from scratch. Without this,
+ *    the broken decoder would treat every re-sent frame as a duplicate and the
+ *    transfer could never recover.
+ *  - UNPACK FAILURE: same reset — the container was corrupted in a way FNV
+ *    did not catch (should be near-impossible; reset anyway for safety).
+ *  - ASSEMBLE FAILURE: LTDecoder.assemble() returning null after isComplete
+ *    is an internal invariant violation (defensive branch only). Reported via
+ *    onError and the decoder is discarded; the next frame starts a fresh
+ *    decoder for the same identity.
  */
 export function ingestOpticalFrame(
   state: {
     decoder: LTDecoder | null;
     identity: string | null;
+    /** Set on first frame of a stream; used to compute real transfer duration. */
+    startTime?: number;
   },
   bytes: Uint8Array,
   opts: ReceiveOpticalParams,
@@ -194,20 +210,38 @@ export function ingestOpticalFrame(
       parsed.header.totalLen,
     );
     state.identity = id;
+    state.startTime = Date.now();
   }
 
-  const d = state.decoder!;
+  const d = state.decoder;
+  if (!d) {
+    // Unreachable (decoder created above), defensive only.
+    opts.onError('Internal error: optical decoder missing after stream init.');
+    return null;
+  }
   d.addFrame(parsed.header.seq, parsed.block);
 
   const total = d.k;
   const progress = d.solvedCount;
+  opts.onProgress?.(progress, total);
 
   if (d.isComplete) {
     const container = d.assemble();
-    if (!container) return { done: false, progress, total };
+    if (!container) {
+      // Defensive: assemble() only returns null when incomplete. Discard the
+      // decoder so the next frame rebuilds instead of spinning here forever.
+      state.decoder = null;
+      state.identity = null;
+      opts.onError('Internal error: decoder reported complete but assembly failed.');
+      return { done: false, progress, total };
+    }
     const checksum = fnv1a(container);
     const ok = checksum === parsed.header.payloadFnv;
     if (ok) {
+      // Terminal success: clear state BEFORE notifying, so the completion
+      // callback observes a clean receiver ready for the next stream.
+      state.decoder = null;
+      state.identity = null;
       try {
         const file = unpackFile(container);
         opts.onFrame({ kind: 'DICOM', name: file.name, data: 'done' });
@@ -216,17 +250,26 @@ export function ingestOpticalFrame(
           transferId: opts.transferId,
           fileSize: file.transmittedSize,
           frameCount: d.framesNew,
-          duration: 0,
+          duration: state.startTime ? Date.now() - state.startTime : 0,
           checksum: String(checksum),
           fileName: file.name,
           fileType: file.type,
           fileBytes: file.bytes,
         });
       } catch (e: any) {
+        // Verified container that fails to unpack: state is already reset, so
+        // a retransmitted carousel can retry instead of replaying the failure.
         opts.onError(`Unpack failed: ${e?.message ?? e}`);
       }
     } else {
-      opts.onError('Checksum mismatch — data corrupted in transit.');
+      // Data corrupted in transit: reset so the retransmission cycle can
+      // rebuild. Keeping the decoder would block recovery — every re-sent
+      // frame would count as a duplicate.
+      state.decoder = null;
+      state.identity = null;
+      opts.onError(
+        `Checksum mismatch (got ${checksum >>> 0}, expected ${parsed.header.payloadFnv >>> 0}) — decoder reset, waiting for retransmission.`,
+      );
     }
     return { done: true, progress, total };
   }

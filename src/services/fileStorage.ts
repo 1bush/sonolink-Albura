@@ -93,3 +93,18 @@ export async function ensureRootDir(): Promise<void> {
     await FileSystem.makeDirectoryAsync(ROOT_DIR, { intermediates: true });
   }
 }
+
+/** Directory holding per-study export bundles (manifests etc.). */
+export async function ensureExportDir(): Promise<string> {
+  const dir = `${ROOT_DIR}exports/`;
+  const info = await FileSystem.getInfoAsync(dir);
+  if (!info.exists) {
+    await FileSystem.makeDirectoryAsync(dir, { intermediates: true });
+  }
+  return dir;
+}
+
+export async function exportManifestPath(studyId: string): Promise<string> {
+  const dir = await ensureExportDir();
+  return `${dir}${studyId}_manifest.txt`;
+}

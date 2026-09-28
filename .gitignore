@@ -4,7 +4,15 @@ dist/
 web-build/
 *.log
 .DS_Store
-android/
+# Android: track config (Gradle/Kotlin/manifest) - ignore build outputs & secrets
+android/.gradle/
+android/build/
+android/app/build/
+android/.cxx/
+android/local.properties
+android/keystore.properties
+android/app/*.keystore
+android/app/*.jks
 ios/
 *.orig.*
 .env
@@ -13,11 +21,11 @@ logs/
 .idea/
 *.iml
 scripts/_dicom_debug.cjs
-android/.gradle/
-android/build/
-android/app/build/
-android/local.properties
-android/app/*.keystore
+
+# Përkohëshme: output-e të test-eve dhe logs
+.tmp-test-build/
+.tmp-test-build-bridge/
+.tmp-*.log
 
 # Local SonoDrop reverse-engineering reference artifacts
 sonodrop-source/

@@ -19,9 +19,8 @@ import { TransferCoordinator, type UnifiedReceivedFile } from '../services/Trans
 import { ensureStudyDir } from '../services/fileStorage';
 import { upsertStudy, insertSop, incrementStudyFileCount } from '../services/database';
 import { saveFrame } from '../services/fileStorage';
-import { getScanCounsel } from '../services/GroqService';
-import { getOllamaCounsel } from '../services/OllamaCounselService';
 import { DicomService } from '../services/DicomService';
+import { getOllamaCounsel, getScanCounsel } from '../services/aiCounsel';
 import {
   decodeOpticalQrData,
   ingestOpticalFrame,
@@ -38,6 +37,8 @@ export default function PairingScreen({ onFileReceived }: Props) {
   const [permission, requestPermission] = useCameraPermissions();
   const [status, setStatus] = useState<string>('disconnected');
   const [counselText, setCounselText] = useState('Waiting for QR code...');
+  /** Optical transfer progress (solved blocks / total blocks) — null = idle. */
+  const [opticalProgress, setOpticalProgress] = useState<{ progress: number; total: number } | null>(null);
   const serviceRef = useRef<TcpConnectionService | null>(null);
   const coordinatorRef = useRef(new TransferCoordinator());
   const scanLock = useRef(false);
@@ -120,7 +121,10 @@ export default function PairingScreen({ onFileReceived }: Props) {
         const groq = await getScanCounsel(parsed.patientId, parsed);
         if (groq && groq.message) counsel = groq;
       }
-      setCounselText(counsel.message);
+      setCounselText(
+        counsel?.message ??
+          'Paired. AI counsel unavailable (Ollama unreachable, no Groq key) — proceeding with transfer.',
+      );
 
       const studyId = `${Date.now()}_${parsed.patientId || 'unknown'}`;
       studyIdRef.current = studyId;
@@ -147,8 +151,13 @@ export default function PairingScreen({ onFileReceived }: Props) {
     ingestOpticalFrame(opticalStateRef.current, bytes, {
       transferId: opticalTransferIdRef.current,
       onFrame: () => setCounselText('Optical frame received.'),
-      onError: (error) => setCounselText(`Optical transfer: ${error}`),
+      onError: (error) => {
+        setOpticalProgress(null);
+        setCounselText(`Optical transfer: ${error}`);
+      },
+      onProgress: (progress, total) => setOpticalProgress({ progress, total }),
       onComplete: (result: OpticalTransferResult) => {
+        setOpticalProgress(null);
         if (!result.success || !result.fileBytes || !result.fileName) return;
         coordinatorRef.current.acceptOpticalResult(result);
         setCounselText(`Optical transfer complete: ${result.fileName}`);
@@ -213,6 +222,28 @@ export default function PairingScreen({ onFileReceived }: Props) {
           <Text style={styles.counselTitle}>counsel</Text>
         </View>
         <Text style={styles.counselText}>{counselText}</Text>
+
+        {opticalProgress && opticalProgress.total > 0 && (
+          <View style={styles.progressBlock}>
+            <View style={styles.progressHeaderRow}>
+              <MaterialCommunityIcons name="flash" size={14} color={theme.colors.primaryLight} />
+              <Text style={styles.progressLabel}>
+                OPTICAL TRANSFER — {opticalProgress.progress}/{opticalProgress.total} blocks
+              </Text>
+              <Text style={styles.progressPercent}>
+                {Math.min(100, Math.round((opticalProgress.progress / opticalProgress.total) * 100))}%
+              </Text>
+            </View>
+            <View style={styles.progressTrack}>
+              <View
+                style={[
+                  styles.progressFill,
+                  { width: `${Math.min(100, (opticalProgress.progress / opticalProgress.total) * 100)}%` },
+                ]}
+              />
+            </View>
+          </View>
+        )}
       </View>
     </View>
   );
@@ -270,5 +301,20 @@ const styles = StyleSheet.create({
   },
   counselTitle: { color: theme.colors.success, fontSize: 15, fontWeight: '700' },
   counselText: { color: theme.colors.textSecondary, fontSize: 13, lineHeight: 20 },
+  progressBlock: { gap: 6 },
+  progressHeaderRow: { flexDirection: 'row', alignItems: 'center', gap: 6 },
+  progressLabel: { flex: 1, color: theme.colors.primaryLight, fontSize: 11, fontWeight: '700', letterSpacing: 0.5 },
+  progressPercent: { color: theme.colors.textPrimary, fontSize: 12, fontWeight: '700' },
+  progressTrack: {
+    height: 8,
+    borderRadius: 4,
+    backgroundColor: 'rgba(255,255,255,0.08)',
+    overflow: 'hidden',
+  },
+  progressFill: {
+    height: '100%',
+    borderRadius: 4,
+    backgroundColor: theme.colors.primary,
+  },
 });
 

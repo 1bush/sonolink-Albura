@@ -29,6 +29,10 @@ export interface DicomMetadata {
   rows?: number;
   columns?: number;
   samplesPerPixel?: number;
+  /** Bits per pixel sample (0028,0100) — 8 or 16 for uncompressed ultrasound. */
+  bitsAllocated?: number;
+  /** 0 = unsigned, 1 = two's complement signed (0028,0103). */
+  pixelRepresentation?: number;
   transferSyntax?: string;
   pixelDataOffset?: number;
   pixelDataLength?: number;
@@ -68,11 +72,11 @@ function group(b: Uint8Array, off: number, le: boolean): number {
   return le ? readU16(b, off, true) : readU16(b, off, false);
 }
 
-// DICOM tag is a 32-bit (group:element) value stored little-endian, so the
-// FIRST 2 bytes are the low 16 bits (element) and the next 2 are the high
-// 16 bits (group). g = first word (element), e = second word (group).
+// DICOM tag is a 32-bit (group, element) pair stored little-endian: the FIRST
+// 2 bytes are the group, the next 2 the element. The canonical tag string
+// form is "GGGGEEEE" (e.g. patient name (0010,0010) → "00100010").
 function tagString(g: number, e: number): string {
-  return e.toString(16).padStart(4, '0').toUpperCase() + g.toString(16).padStart(4, '0').toUpperCase();
+  return g.toString(16).padStart(4, '0').toUpperCase() + e.toString(16).padStart(4, '0').toUpperCase();
 }
 
 export class DicomService {
@@ -153,6 +157,8 @@ export class DicomService {
         case '00280010': meta.rows = readU16(b, valueOff, le); break;
         case '00280011': meta.columns = readU16(b, valueOff, le); break;
         case '00280002': meta.samplesPerPixel = readU16(b, valueOff, le); break;
+        case '00280100': meta.bitsAllocated = readU16(b, valueOff, le); break;
+        case '00280103': meta.pixelRepresentation = readU16(b, valueOff, le); break;
         case '7FE00010':
           meta.pixelDataOffset = valueOff;
           meta.pixelDataLength = valueLen;

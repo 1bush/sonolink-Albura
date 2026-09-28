@@ -261,20 +261,52 @@ export function buildSonoDropQR(info: {
 }
 
 /**
- * Builds the heartbeat/registration message the phone sends to the scanner
- * right after opening the TCP socket, telling it where (IP/port) to send
- * files back to. UNCONFIRMED shape — see file header.
+ * Extracts the registration token from the device's reply after the TCP
+ * connection opens. Shape (per HeartBeatThread / ParseReplyClientMsg in
+ * classes.dex): the device replies with a TLV stream whose REPLY_HEADER
+ * (type 4000) value carries the token string. The token is then echoed back
+ * in the heartbeat via buildCompositeHeartMessage.
+ *
+ * Still UNCONFIRMED against a live capture — if the reply uses a different
+ * TLV type or a raw (non-TLV) token, parseReplyToken returns null and the
+ * caller must fall back (see TcpConnectionService's two-phase heartbeat).
+ *
+ * @returns The token string, or null if no 4000-TLV is found.
+ */
+export function parseReplyToken(raw: string): string | null {
+  const tlvs = tokenizeTLVStream(raw);
+  for (const t of tlvs) {
+    if (t.type === TLV_TYPE.REPLY_HEADER && t.value.length > 0) return t.value;
+  }
+  return null;
+}
+
+/**
+ * Builds the heartbeat/registration message the phone sends to the scanner.
+ *
+ * CONFIRMED two-phase flow (from HeartBeatThread in classes.dex):
+ *   1. Phone opens the TCP socket and WAITS for the device's reply.
+ *   2. The reply carries a registration token (see parseReplyToken).
+ *   3. Phone sends CompositeHeartMsg with that token:
+ *      [6000][len][0001][6001][token len][token]
+ *
+ * The legacy one-shot shape (device-patient fields baked in) was never
+ * observed on real hardware and is kept ONLY as a fallback when no token
+ * could be extracted — treat it as a compatibility shim, not a spec.
  */
 export function buildHeartbeat(params: {
   localIP: string;
   localPort: number;
   patientId: string;
   username?: string;
+  /** Registration token extracted from the device reply (preferred path). */
+  token?: string;
 }): string {
-  // Kept as a compatibility wrapper for existing callers. Sonodrop's actual
-  // heartbeat contains the token returned by ParseReplyClientMsg; it does not
-  // contain the local IP/port/patient fields directly. Until CompositeClientInfo
-  // is reproduced, callers must not treat this as a complete registration flow.
+  if (params.token) {
+    return buildCompositeHeartMessage(params.token);
+  }
+  // Legacy fallback: no token available. Kept for compatibility with the
+  // old one-shot flow; does NOT implement a complete registration.
   void params.localIP;
   void params.localPort;
   void params.username;

@@ -1,0 +1,12 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Additive: vargje per modulet optike Drita->SonoLink. File i ri, nuk prek strings.xml. -->
+<resources>
+  <string name="capture_hint">Drejto kameren nga telefoni, TV apo ekrani i aparatit dhe shtyp Kap. Teksti lexohet vete (OCR) dhe kopjohet; fotoja ruhet.</string>
+  <string name="capture_btn_shoot">KAP</string>
+  <string name="capture_btn_copy">Kopjo tekstin</string>
+  <string name="capture_btn_save">Ruaj foton</string>
+  <string name="sos_title">SonoLink — Dergo me blic (pa QR)</string>
+  <string name="sos_hint">Shkruaj tekstin dhe shtyp Dergo — blici pulson dhe cdo kamere perballe e lexon. Per erresire totale.</string>
+  <string name="sos_btn_send">Dergo me blic</string>
+  <string name="sos_btn_stop">Ndal</string>
+</resources>

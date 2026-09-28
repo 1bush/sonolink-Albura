@@ -2,23 +2,16 @@
   "expo": {
     "name": "SonoLink",
     "slug": "sonolink",
-    "version": "2.2.0",
+    "version": "3.0.0",
     "orientation": "portrait",
     "icon": "./assets/icon.png",
     "userInterfaceStyle": "light",
     "splash": {
       "backgroundColor": "#1E8E82"
     },
-    "assetBundlePatterns": ["**/*"],
-    "ios": {
-      "supportsTablet": true,
-      "bundleIdentifier": "al.albura.sonolink",
-      "infoPlist": {
-        "NSCameraUsageDescription": "Kamera nevojitet për të skanuar kodin QR të aparatit të ultrazërit.",
-        "NSLocalNetworkUsageDescription": "Aplikacioni lidhet me aparatin e ultrazërit në rrjetin lokal për të marrë imazhet.",
-        "NSPhotoLibraryAddUsageDescription": "Aplikacioni ruan imazhet e marra nga aparati në galeri (opsionale)."
-      }
-    },
+    "assetBundlePatterns": [
+      "**/*"
+    ],
     "android": {
       "package": "al.albura.sonolink",
       "permissions": [

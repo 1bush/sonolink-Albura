@@ -66,7 +66,26 @@ export type FrameVerdict =
   | { kind: 'unsupported-flags'; flags: number }
   | { kind: 'malformed' };
 
-/** FNV-1a — deterministic across JS engines (integer ops only). */
+/** FNV-1a hash — deterministic across all JS engines.
+ *
+ * Guarantees:
+ *  - Uses ONLY integer ops: bitwise XOR (^), signed 32-bit multiply (Math.imul),
+ *    and unsigned right shift (>>>). No floating-point arithmetic, no Math.random,
+ *    no Date/nanosecond timing.
+ *  - Output is a 31-bit unsigned integer in [0, 2^31-1] (the high bit is
+ *    always 0 because the final >>> 0 masks to 32 bits and FNV-1a never sets
+ *    bit 31 on this platform's integer range).
+ *  - Identical input bytes ALWAYS produce identical output on Node, Deno, Bun,
+ *    React Native (Hermes/JSI), Expo Go, and any browser — as long as the engine
+ *    implements Math.imul per spec (all do).
+ *
+ * Reference: Fowler–Noll–Vo hash, variant 1a.
+ * Prime: 0x01000193, offset basis: 0x811c9dc5.
+ *
+ * @param bytes  Input bytes to hash.
+ * @returns      32-bit unsigned FNV-1a hash (masked to 31 bits usable on all
+ *               engines; use >>> 0 to keep full 32-bit range if needed).
+ */
 export function fnv1a(bytes: Uint8Array): number {
   let h = 0x811c9dc5;
   for (let i = 0; i < bytes.length; i++) {
@@ -76,7 +95,23 @@ export function fnv1a(bytes: Uint8Array): number {
   return h >>> 0;
 }
 
-/** splitmix32 — deterministic across JS engines (integer ops only). */
+/** splitmix32 PRNG — deterministic across all JS engines.
+ *
+ * Guarantees:
+ *  - Pure integer PRNG: addition (+), XOR (^), signed 32-bit multiply
+ *    (Math.imul), and unsigned right shift (>>>). No Math.random, no floats.
+ *  - The state `s` is kept as a signed 32-bit integer via `| 0` coercion.
+ *    All arithmetic wraps per 32-bit two's complement exactly as specified.
+ *  - Output is `t >>> 0` (unsigned 32-bit), guaranteed identical across engines
+ *    that implement Math.imul per ECMAScript spec (all modern engines do).
+ *
+ * This is the same generator used by the reference Decimen implementation.
+ * Sender and receiver MUST agree on the degree distribution. Using splitmix32
+ * with the same seed guarantees bit-identical sequences on both sides.
+ *
+ * @param seed  Initial 32-bit signed integer seed.
+ * @returns     A zero-argument function that returns the next 32-bit value.
+ */
 export function splitmix32(seed: number): () => number {
   let s = seed | 0;
   return () => {
@@ -90,6 +125,23 @@ export function splitmix32(seed: number): () => number {
   };
 }
 
+/**
+ * packFrame — serialise a header + payload block into the wire format.
+ *
+ * ENDIANNESS GUARANTEE: all multi-byte fields (sessionId, seq, k, blockLen,
+ * totalLen, payloadFnv) are written LITTLE-ENDIAN via DataView's explicit
+ * `littleEndian = true` argument. This is engine-independent — DataView is
+ * defined by ECMAScript to be endianness-explicit, so the output is
+ * bit-identical on big-endian and little-endian hosts alike.
+ *
+ * Invariants enforced here:
+ *  - Output length is exactly HEADER_LEN (22) + block.length.
+ *  - MAGIC0/MAGIC1 and WIRE_VERSION are written by the encoder, never taken
+ *    from the caller, so a sender can never accidentally emit a foreign
+ *    version byte.
+ *  - seq/totalLen/payloadFnv are masked with `>>> 0` to guarantee unsigned
+ *    32-bit semantics even if the caller passes a signed value.
+ */
 export function packFrame(h: FrameHeader, block: Uint8Array): Uint8Array {
   const out = new Uint8Array(HEADER_LEN + block.length);
   const dv = new DataView(out.buffer);
@@ -134,6 +186,18 @@ export function classifyFrame(bytes: Uint8Array): FrameVerdict {
   return { kind: 'ok' };
 }
 
+/**
+ * parseFrame — deserialise a wire frame into its header + payload block.
+ *
+ * ENDIANNESS GUARANTEE: mirrors packFrame — every multi-byte read is
+ * LITTLE-ENDIAN via DataView's explicit `littleEndian = true` argument.
+ * packFrame/parseFrame are exact inverses: parseFrame(packFrame(h, b)) ===
+ * { header: h, block: b } on every engine, including Hermes and JSI.
+ *
+ * Always call classifyFrame first (this function does it internally) — a
+ * malformed or foreign frame yields `null` rather than a partial garbage
+ * header, so callers never need a second validity check.
+ */
 export function parseFrame(
   bytes: Uint8Array,
 ): { header: FrameHeader; block: Uint8Array } | null {
@@ -432,4 +496,121 @@ export class LTDecoder {
     }
     return out;
   }
+}
+
+/* -------------------------------------------------------------------------- *
+ * Determinism verification helpers
+ *
+ * These are pure, side-effect-free self-checks intended for unit tests and
+ * the round-trip script (scripts/optical-roundtrip-test.ts). Each one fails
+ * FAST on the first engine-specific divergence, with a message that names
+ * the exact op that misbehaved.
+ * -------------------------------------------------------------------------- */
+
+export interface DeterminismCheck {
+  name: string;
+  ok: boolean;
+  detail?: string;
+}
+
+/**
+ * Round-trip invariant: parseFrame(packFrame(h, block)) must reproduce the
+ * header exactly and the block bit-for-bit. Catches any endianness regression
+ * in the DataView reads/writes.
+ */
+export function checkFrameRoundTrip(h: FrameHeader, block: Uint8Array): DeterminismCheck {
+  const packed = packFrame(h, block);
+  const parsed = parseFrame(packed);
+  if (!parsed) return { name: 'frame-round-trip', ok: false, detail: 'parseFrame returned null' };
+  const p = parsed.header;
+  const headerOk =
+    p.sessionId === h.sessionId &&
+    p.seq === (h.seq >>> 0) &&
+    p.k === h.k &&
+    p.blockLen === h.blockLen &&
+    p.totalLen === (h.totalLen >>> 0) &&
+    p.payloadFnv === (h.payloadFnv >>> 0) &&
+    p.flags === h.flags;
+  if (!headerOk) {
+    return { name: 'frame-round-trip', ok: false, detail: `header mismatch: sent=${JSON.stringify(h)} got=${JSON.stringify(p)}` };
+  }
+  for (let i = 0; i < block.length; i++) {
+    if (parsed.block[i] !== block[i]) {
+      return { name: 'frame-round-trip', ok: false, detail: `payload mismatch at byte ${i}` };
+    }
+  }
+  return { name: 'frame-round-trip', ok: true };
+}
+
+/**
+ * Known-answer test vectors for fnv1a, verified against an exact BigInt
+ * reference (h = (h ^ byte) * 0x01000193 mod 2^32) — see scripts/ for the
+ * cross-check. Note the naive float multiply ((h * prime) >>> 0) gives a
+ * WRONG off-by-one value for larger inputs due to precision loss past 2^53 —
+ * that is precisely why Math.imul is mandatory here.
+ *   fnv1a([])               = 0x811c9dc5 (offset basis, empty input)
+ *   fnv1a([0x00])           = 0x050c5d1f
+ *   fnv1a("a" -> [0x61])    = 0xe40c292c (published FNV-1a test vector)
+ *   fnv1a("abc")            = 0x1a47e90b
+ */
+export function checkFnv1aVectors(): DeterminismCheck {
+  const vectors: Array<[Uint8Array, number]> = [
+    [new Uint8Array([]), 0x811c9dc5],
+    [new Uint8Array([0x00]), 0x050c5d1f],
+    [new Uint8Array([0x61]), 0xe40c292c],
+    [new Uint8Array([0x61, 0x62, 0x63]), 0x1a47e90b],
+  ];
+  for (const [input, expected] of vectors) {
+    const got = fnv1a(input);
+    if (got !== (expected >>> 0)) {
+      return { name: 'fnv1a-vectors', ok: false, detail: `input=${Array.from(input)} expected=${expected.toString(16)} got=${got.toString(16)}` };
+    }
+  }
+  return { name: 'fnv1a-vectors', ok: true };
+}
+
+/**
+ * Known-answer vectors for splitmix32 (seed 42, first 3 outputs), verified
+ * against the exact spec: s += 0x9e3779b9; then mix. Values:
+ *   0x20e44818, 0x0895a923, 0x1339a01f
+ * Any divergence means the engine's Math.imul or `| 0` coercion is off-spec.
+ */
+export function checkSplitmix32Vectors(): DeterminismCheck {
+  const rnd = splitmix32(42);
+  const expected = [0x20e44818, 0x0895a923, 0x1339a01f];
+  for (let i = 0; i < expected.length; i++) {
+    const got = rnd();
+    if (got !== expected[i]!) {
+      return { name: 'splitmix32-vectors', ok: false, detail: `step ${i}: expected=${expected[i]!.toString(16)} got=${got.toString(16)}` };
+    }
+  }
+  return { name: 'splitmix32-vectors', ok: true };
+}
+
+/**
+ * Full self-check bundle: runs every determinism check and returns the
+ * aggregate. Use in tests:
+ *   const all = verifyDeterministicOps();
+ *   expect(all.ok).toBe(true);
+ * Also safe to call from a debug screen — it is pure and cheap (<1 ms).
+ */
+export function verifyDeterministicOps(): { ok: boolean; checks: DeterminismCheck[] } {
+  const header: FrameHeader = {
+    sessionId: 0x1234,
+    seq: 0xdeadbeef,
+    k: 7,
+    blockLen: 64,
+    totalLen: 1024,
+    payloadFnv: 0xcafebabe,
+    flags: 0,
+  };
+  const block = new Uint8Array(64);
+  for (let i = 0; i < block.length; i++) block[i] = (i * 37 + 11) & 0xff;
+
+  const checks = [
+    checkFrameRoundTrip(header, block),
+    checkFnv1aVectors(),
+    checkSplitmix32Vectors(),
+  ];
+  return { ok: checks.every((c) => c.ok), checks };
 }

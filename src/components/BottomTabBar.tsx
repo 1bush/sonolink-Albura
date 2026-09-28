@@ -9,10 +9,15 @@ interface Props {
   onChange: (tab: TabKey) => void;
 }
 
+// Renditja: DECIMEN (transferimi optik) është protocol-i i PARË dhe parazgjedhur,
+// pastaj protocollet e tjera me radhë (Home, Scan/QR, Album, Settings).
 const TABS: { key: TabKey; label: string; icon: keyof typeof Ionicons.glyphMap }[] = [
+  { key: 'optical', label: 'DECIMEN', icon: 'flash-outline' },
   { key: 'home', label: 'Home', icon: 'home-outline' },
   { key: 'scan', label: 'Scan', icon: 'qr-code-outline' },
   { key: 'album', label: 'ALBUM', icon: 'images-outline' },
+  // ADDITIVE SonoLink+Drita: tab i ri optik (nuk prek tab-et ekzistuese).
+  { key: 'drita', label: 'DRITA', icon: 'sunny-outline' },
   { key: 'settings', label: 'SETTINGS', icon: 'settings-outline' },
 ];
 

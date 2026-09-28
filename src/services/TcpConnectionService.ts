@@ -4,9 +4,9 @@
 import TcpSocket from 'react-native-tcp-socket';
 import * as Network from 'expo-network';
 import { Buffer } from 'buffer';
-import { buildHeartbeat, buildFileAck } from '../protocol/sonoDropProtocol';
+import { buildHeartbeat, buildFileAck, parseReplyToken } from '../protocol/sonoDropProtocol';
 import type { SonoDropQRInfo } from '../protocol/sonoDropProtocol';
-import { FileFrameReader, type ReceivedFileFrame } from './framing';
+import { FileFrameReader, describeRawChunkForDebugging, type ReceivedFileFrame } from './framing';
 import { findDeviceIP } from './NetworkScanner';
 
 export type ConnectionEvent =
@@ -21,6 +21,9 @@ type Listener = (event: ConnectionEvent) => void;
 
 const LISTEN_PORT_RANGE = { min: 40000, max: 49999 };
 
+/** Max raw chunks kept in the debug ring buffer for framing analysis. */
+const RAW_CAPTURE_LIMIT = 40;
+
 export class TcpConnectionService {
   private client: ReturnType<typeof TcpSocket.createConnection> | null = null;
   private server: ReturnType<typeof TcpSocket.createServer> | null = null;
@@ -28,6 +31,12 @@ export class TcpConnectionService {
   private frameReader = new FileFrameReader();
   private fileIndex = 0;
   private connected = false;
+  /** Two-phase heartbeat: set once the registration heartbeat has been sent. */
+  private heartbeatSent = false;
+  /** Pending connection params used by the two-phase heartbeat. */
+  private pendingHeartbeat: { localIP: string; localPort: number; patientId: string } | null = null;
+  /** Debug ring buffer of raw incoming chunks (for first real-device framing capture). */
+  private rawCapture: string[] = [];
 
   on(listener: Listener) {
     this.listeners.push(listener);
@@ -85,13 +94,11 @@ export class TcpConnectionService {
           () => {
             this.connected = true;
             this.log('Lidhja TCP u hap me sukses', 'success');
-            const heartbeat = buildHeartbeat({
-              localIP,
-              localPort,
-              patientId,
-              username: 'SonoLink',
-            });
-            this.client!.write(heartbeat);
+            // TWO-PHASE heartbeat: do NOT write immediately. The device's
+            // reply carries the registration token (ParseReplyClientMsg);
+            // handleIncomingBytes sends the heartbeat with that token.
+            this.heartbeatSent = false;
+            this.pendingHeartbeat = { localIP, localPort, patientId };
             this.emit({ type: 'connected', localIP, localPort });
             resolve();
           }
@@ -147,6 +154,32 @@ export class TcpConnectionService {
 
   private handleIncomingBytes(data: Buffer | string) {
     const buf = typeof data === 'string' ? Buffer.from(data) : data;
+
+    // Debug capture: keep a ring buffer of raw chunk descriptions so the
+    // first real-device session can be analysed to confirm the file framing.
+    this.rawCapture.push(describeRawChunkForDebugging(buf));
+    if (this.rawCapture.length > RAW_CAPTURE_LIMIT) this.rawCapture.shift();
+
+    // Phase 2 of the heartbeat: look for the registration token in the
+    // device's first reply, then send CompositeHeartMsg with that token.
+    if (!this.heartbeatSent && this.pendingHeartbeat) {
+      const token = parseReplyToken(buf.toString('utf8'));
+      if (token) {
+        const hb = buildHeartbeat({ ...this.pendingHeartbeat, token });
+        this.client?.write(hb);
+        this.heartbeatSent = true;
+        this.log(`Heartbeat u dërgua me token nga pajisja (${token.length} shkronja)`, 'success');
+      } else {
+        // Fallback: no 4000-TLV seen — send legacy heartbeat so the old
+        // one-shot flow still works while the real shape is unconfirmed.
+        const hb = buildHeartbeat(this.pendingHeartbeat);
+        this.client?.write(hb);
+        this.heartbeatSent = true;
+        this.log('Përgjigja pa token të njohur — heartbeat legacy u dërgua (shiko rawCapture)', 'warning');
+      }
+      return;
+    }
+
     const frames = this.frameReader.push(buf);
     for (const frame of frames) {
       this.log(`Skedari u mor: ${frame.name} (${formatSize(frame.bytes.length)})`, 'success');
@@ -154,6 +187,11 @@ export class TcpConnectionService {
       this.sendFileAck(this.fileIndex, 0);
       this.fileIndex += 1;
     }
+  }
+
+  /** Dump of the last raw chunks (hex + ascii head) for framing analysis. */
+  getRawCapture(): string[] {
+    return [...this.rawCapture];
   }
 
   private sendFileAck(index: number, status: 0 | 1) {
@@ -172,6 +210,9 @@ export class TcpConnectionService {
     this.client = null;
     this.server = null;
     this.connected = false;
+    this.heartbeatSent = false;
+    this.pendingHeartbeat = null;
+    this.rawCapture = [];
     this.frameReader.reset();
     this.fileIndex = 0;
     this.emit({ type: 'disconnected' });
