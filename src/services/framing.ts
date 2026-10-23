@@ -79,6 +79,10 @@ export const MSG_CTRL_NO_DATA = '5001';
 export const HEADER_BYTES = 256;
 
 /** [type:4][len:4][value:len] — every numeric field is decimal ASCII. */
+/** Hard cap so a corrupt/unverified 4-digit size field can't slide near a
+ *  memory / ArrayBuffer limit. Real DICOM/RLE frames are a few MB max. */
+export const MAX_FILE_SIZE = 25 * 1024 * 1024; // 25 MB
+
 const FIELD_WIDTH = 4;
 
 /** Reads one 4-digit decimal field, or null if it is not one. */
@@ -178,6 +182,13 @@ export class FileFrameReader {
 
       const size = parseInt(sizeStr, 10);
       if (!name || !Number.isFinite(size) || size < 0) {
+        this.resync();
+        continue;
+      }
+
+      // A corrupt/unverified stream can carry pathological sizes; treat it as
+      // an invalid header again rather than trying to allocate > MAX_FILE_SIZE.
+      if (size > MAX_FILE_SIZE) {
         this.resync();
         continue;
       }

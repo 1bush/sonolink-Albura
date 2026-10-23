@@ -30,6 +30,14 @@ export interface SopRow {
   StudyID: string;
 }
 
+export interface DeviceHistoryRow {
+  ssid: string;
+  host: string;
+  password: string;
+  last_connected: string;
+}
+
+
 let dbPromise: Promise<SQLite.SQLiteDatabase> | null = null;
 
 function getDb(): Promise<SQLite.SQLiteDatabase> {
@@ -65,6 +73,13 @@ export async function initDatabase(): Promise<void> {
       Idx INTEGER,
       StudyID CHAR(32),
       PRIMARY KEY (Name, StudyID)
+    );
+
+    CREATE TABLE IF NOT EXISTS device_history (
+      ssid TEXT PRIMARY KEY,
+      host TEXT,
+      password TEXT,
+      last_connected TEXT
     );
 
     CREATE INDEX IF NOT EXISTS idx_sopinfo_study ON sopinfo (StudyID);
@@ -120,4 +135,18 @@ export async function studyStats(): Promise<{ studies: number; files: number }> 
   const s = await db.getFirstAsync<{ c: number }>(`SELECT COUNT(*) as c FROM studyinfo`);
   const f = await db.getFirstAsync<{ c: number }>(`SELECT COUNT(*) as c FROM sopinfo WHERE Status = 'received'`);
   return { studies: s?.c ?? 0, files: f?.c ?? 0 };
+}
+
+export async function savePairedDevice(ssid: string, host: string, password: string): Promise<void> {
+  const db = await getDb();
+  await db.runAsync(
+    `INSERT INTO device_history (ssid, host, password, last_connected) VALUES (?, ?, ?, ?)
+     ON CONFLICT(ssid) DO UPDATE SET host = excluded.host, password = excluded.password, last_connected = excluded.last_connected`,
+    [ssid, host, password, new Date().toISOString()]
+  );
+}
+
+export async function listPairedDevices(): Promise<DeviceHistoryRow[]> {
+  const db = await getDb();
+  return db.getAllAsync<DeviceHistoryRow>(`SELECT * FROM device_history ORDER BY last_connected DESC`);
 }

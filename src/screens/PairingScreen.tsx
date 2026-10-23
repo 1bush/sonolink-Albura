@@ -17,7 +17,7 @@ import {
 import { TcpConnectionService, type ConnectionEvent } from '../services/TcpConnectionService';
 import { TransferCoordinator, type UnifiedReceivedFile } from '../services/TransferCoordinator';
 import { ensureStudyDir } from '../services/fileStorage';
-import { upsertStudy, insertSop, incrementStudyFileCount } from '../services/database';
+import { upsertStudy, insertSop, incrementStudyFileCount, savePairedDevice } from '../services/database';
 import { saveFrame } from '../services/fileStorage';
 import { DicomService } from '../services/DicomService';
 import { getOllamaCounsel, getScanCounsel } from '../services/aiCounsel';
@@ -113,6 +113,7 @@ export default function PairingScreen({ onFileReceived }: Props) {
       if (!parsed) return;
 
       Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success).catch(() => {});
+      await savePairedDevice(parsed.ssid, parsed.host, parsed.password).catch(() => {});
 
       // Prefer local Ollama (no API key needed); fall back to Groq only if
       // Ollama is unreachable.
