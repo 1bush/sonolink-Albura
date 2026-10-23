@@ -13,6 +13,7 @@
  * app, stays structurally compatible.
  */
 import * as SQLite from 'expo-sqlite';
+import * as SecureStore from 'expo-secure-store';
 
 export interface StudyRow {
   ID: string; // e.g. "20240110_163854_6835451"
@@ -140,13 +141,35 @@ export async function studyStats(): Promise<{ studies: number; files: number }> 
 export async function savePairedDevice(ssid: string, host: string, password: string): Promise<void> {
   const db = await getDb();
   await db.runAsync(
-    `INSERT INTO device_history (ssid, host, password, last_connected) VALUES (?, ?, ?, ?)
-     ON CONFLICT(ssid) DO UPDATE SET host = excluded.host, password = excluded.password, last_connected = excluded.last_connected`,
-    [ssid, host, password, new Date().toISOString()]
+    `INSERT INTO device_history (ssid, host, last_connected) VALUES (?, ?, ?)
+     ON CONFLICT(ssid) DO UPDATE SET host = excluded.host, last_connected = excluded.last_connected`,
+    [ssid, host, new Date().toISOString()]
   );
+  // The WiFi password is no longer kept in plain text in SQLite — it is pinned to
+  // the OS secure store (Keychain on iOS, AES-256 encrypted on Android).
+  await saveWifiPassword(ssid, password);
+}
+
+/** Store (and overwrite) the SSID's WiFi credential in the secure store. */
+export async function saveWifiPassword(ssid: string, password: string): Promise<void> {
+  await SecureStore.setItemAsync(`sonolink:devicepass:${ssid}`, password);
+}
+
+/** Return the WiFi credential for an SSID, or null when it is absent. */
+export async function getWifiPassword(ssid: string): Promise<string | null> {
+  return SecureStore.getItemAsync(`sonolink:devicepass:${ssid}`);
 }
 
 export async function listPairedDevices(): Promise<DeviceHistoryRow[]> {
   const db = await getDb();
-  return db.getAllAsync<DeviceHistoryRow>(`SELECT * FROM device_history ORDER BY last_connected DESC`);
+  const rows = await db.getAllAsync<{ ssid: string; host: string; last_connected: string }>(
+    `SELECT ssid, host, last_connected FROM device_history ORDER BY last_connected DESC`
+  );
+  // The password now lives in the OS keychain, never in this local SQLite file.
+  return Promise.all(
+    rows.map(async (row) => ({
+      ...row,
+      password: (await getWifiPassword(row.ssid)) ?? '',
+    }))
+  );
 }
